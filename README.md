@@ -1,57 +1,81 @@
-# portfolio Project 2 Quantum for Portfolio Optimization
+# Quantum vs Classical Portfolio Optimization
+# San Angel Digital
+# Iván Barrientos Salas
 
-## San Angel Digital
+Este notebook (`bq-vs-qaoa_v3.ipynb`) implementa y compara soluciones clásicas y cuánticas para un problema de **Optimización Binaria Cuadrática (BQP)** inspirado en asignación de portafolio.
 
-### Iván Barrientos Salas
+## Objetivos
 
-Este proyecto utiliza algoritmos cuánticos para resolver un problema de optimización financiera: encontrar la combinación óptima de activos (bonos) cuya duración ponderada se acerque a un objetivo específico (target_duration = 1.0). El enfoque combina la librería PennyLane para computación cuántica y técnicas clásicas de optimización (VQE, Variational Quantum Eigensolver). A continuación, se detallan las cuatro secciones principales del programa:
+1. **Formulación matemática clásica** del problema con:
+   - Variables binarias \( x_i \in \{0,1\} \)
+   - Restricciones lineales de cardinalidad y opcionalmente por *bucket*
+   - Objetivo cuadrático \(-\mu^T x + x^T (\gamma \Sigma) x\)
 
-#### 1. Definición del Problema
-El objetivo es minimizar la diferencia entre la duración total de una cartera de  bonos y un valor objetivo (1.0). Los parámetros de entrada son:
+2. **Conversión a QUBO** (Task 2 del reto) mediante:
+   - Penalización explícita de restricciones
+   - `QuadraticProgramToQubo` de Qiskit Optimization
 
-    ° betas: Contribución de cada bono a la duración ([0.3, 0.5, 0.7]).
-    ° x_vals: Valores de los activos (simplificados a [1.0, 1.0, 1.0]).
-    ° target_duration: Duración deseada (1.0).
+3. **Programa cuántico** usando QAOA con:
+   - `SPSA` como optimizador clásico
+   - Parámetros (`reps`, `maxiter`, `shots`) adaptados al tamaño del problema
+   - Guardrails para escalabilidad
 
-El problema se modela como un sistema de optimización cuadrática (QUBO), donde las variables binarias representan la inclusión (1) o exclusión (0) de cada bono.
+4. **Comparación con métodos clásicos**:
+   - Solver exacto `NumPyMinimumEigensolver` (N ≤ 20)
+   - Fuerza bruta (N ≤ 20)
+   - Heurística random
 
-#### 2. Conversión a Física Cuántica
-Para resolver el problema con un circuito cuántico, se construye un Hamiltoniano QUBO que codifica la función de costo. Este Hamiltoniano se expresa como una combinación de operadores de Pauli (Z y ZZ), que representan interacciones entre qubits:
+5. **Escalamiento y métricas**:
+   - Loop de escalamiento con N = 5, 10, 15 (y configurable)
+   - Restricciones por *bucket* (uniformes o proporcionales)
+   - Comparación “mismo tiempo” entre QAOA y heurística clásica
+   - Gráficas de calidad y tiempo
 
-    ° Términos lineales: Corresponden a la contribución individual de cada bono (PauliZ).
+## Estructura de bloques
 
-    ° Términos cuadráticos: Capturan las interacciones entre pares de bonos (PauliZ @ PauliZ).
+- **Bloque 0:** Imports y utilidades (`objective_value`)
+- **Bloque 1:** Carga de datos desde `data_assets_dictionary.xlsx` y construcción de μ, Σ
+- **Bloque 2:** Formulación BQP clásica
+- **Bloque 2.1:** Conversión explícita a QUBO
+- **Bloque 2.2:** Restricciones por bucket (opcional)
+- **Bloque 2.9:** Guardrails por tamaño (evita solver exacto si N > 20)
+- **Bloque 3:** Baselines clásicos con guardrails
+- **Bloque 4:** QAOA adaptativo
+- **Bloque 5:** Resumen comparativo y visualización
+- **Bloque 8:** Escalamiento con caps por bucket (proporcionales)
+- **Bloque 9:** Comparación a mismo tiempo (QAOA vs heurística clásica)
 
-La función build_qubo_hamiltonian calcula los coeficientes del Hamiltoniano a partir de los parámetros del problema. Por ejemplo, el término lineal para el bono i incluye:
-                coeffs.append(-Q[i,i]/2 - c[i]/2)  # Término Z (operador PauliZ)
+## ⚙️ Uso
 
-#### 3. Entrenamiento del Circuito Cuántico
-El circuito cuántico (ansatz) utiliza capas alternadas de rotaciones y entrelazamiento:
+1. Colocar el archivo `data_assets_dictionary.xlsx` en la ruta correcta o ajustar `EXCEL_PATH` en Bloque 1.
+2. Ajustar `N_SELECT` en Bloque 1:
+   - 5 para demostraciones rápidas
+   - 31 o 109 para replicar experimentos del ZIP
+3. (Opcional) Activar o personalizar restricciones por bucket en Bloque 2.2.
+4. Ejecutar los bloques en orden para:
+   - Construir el problema
+   - Resolver con métodos clásicos y cuánticos
+   - Analizar escalamiento y comparativas a mismo tiempo
 
-    1. Rotaciones Y (RY): Aplicadas a cada qubit con ángulos aleatorios iniciales.
+## Salidas
 
-    2. Entrelazamiento (CZ): Generado con compuertas controladas-Z entre qubits adyacentes.
+- **Resumen comparativo** de soluciones clásicas vs QAOA
+- **Gráficas**:
+  - Calidad de solución vs tamaño
+  - Tiempo de cómputo vs tamaño
+- **Tabla** con resultados por instancia (N, budget, f_numpy, f_qaoa, etc.)
+- **Reporte por bucket**: capacidades, activos seleccionados, utilización
 
-El dispositivo cuántico simulado (default.qubit) evalúa el valor esperado del Hamiltoniano mediante la función cost_function, que sirve como criterio para el optimizador clásico (Gradient Descent). Durante 100 iteraciones, el algoritmo ajusta los parámetros del circuito para minimizar la energía (valor esperado):
+## Notas
 
-                for iteration in range(100):
-                    params, energy = optimizer.step_and_cost(cost_function, params)
+- Con **N grande (>20)** el solver exacto se omite automáticamente y QAOA usa parámetros reducidos.
+- Para N ≥ 64 se sugiere usar `AerSimulator(method='matrix_product_state')` o IBM Runtime.
+- Las comparaciones “mismo tiempo” son útiles para mostrar la competitividad de QAOA frente a heurísticas clásicas bajo restricciones de tiempo.
 
-#### 4. Obtención de la Mejor Combinación
-Tras la optimización, se calculan las probabilidades de cada estado base (combinación de bonos) con la función get_probabilities. Los resultados se interpretan como:
+## Requisitos
 
-    ° Estados binarios: Cada qubit representa un bono (ej: 101 = incluir el bono 1 y 3, excluir el 2).
+- `qiskit`
+- `qiskit-aer` (opcional pero recomendado para shots realistas)
+- `numpy`, `pandas`, `matplotlib`
 
-    ° Probabilidades: Indican la optimalidad de cada combinación.
-
-Por ejemplo, si el estado 011 tiene una probabilidad del 90%, significa que la combinación que incluye los bonos 2 y 3 es cercana a la solución óptima.
-
-#### Resultados y Conclusión
-El programa imprime:
-
-    ° La energía mínima encontrada (valor de la función de costo).
-    ° Los parámetros óptimos del circuito.
-    ° Las probabilidades de todas las combinaciones posibles.
-
-Este enfoque demuestra cómo la computación cuántica híbrida (VQE) puede aplicarse a problemas financieros, aunque en este caso se usa un simulador debido a las limitaciones actuales de hardware. La metodología es escalable a problemas más complejos, como carteras con más activos o restricciones adicionales.
-
+---
