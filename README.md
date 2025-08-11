@@ -24,4 +24,5 @@ To validate our approach, we implemented a rigorous benchmarking process as requ
 
 The presentation slides summarizing our project can be found here:
 
-[Link to Your Presentation Deck]
+[Presentation Deck]
+](https://github.com/ivanbarrientosx/portfolio/blob/main/classical-vs-quantum-solvers-for-portfolio-optimization.pptx)
